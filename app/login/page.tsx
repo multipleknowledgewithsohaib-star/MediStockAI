@@ -99,12 +99,11 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={isSubmitting}
-                            className="w-full h-14 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 shadow-lg shadow-purple-500/20 disabled:opacity-70"
+                            className="w-full h-14 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold rounded-2xl flex items-center justify-center gap-3 transition-all hover:shadow-lg hover:shadow-purple-500/50 active:scale-95"
                         >
                             {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Lock className="h-5 w-5" />}
                             {isSubmitting ? "Signing In..." : "Sign In"}
                         </button>
-                    </form>
 
                     <div className="relative my-8">
                         <div className="absolute inset-0 flex items-center">
