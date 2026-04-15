@@ -1,0 +1,370 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  POS
+}
+
+model Product {
+  id            Int            @id @default(autoincrement())
+  item_code     String         @unique // e.g. "ITEM001"
+  name          String
+  brand         String
+  category      String
+  purchasePrice Float
+  salePrice     Float
+  discountPercent Float        @default(0)
+  isDiscountActive Boolean     @default(false)
+  defaultDiscount Float        @default(0)
+  stock         Int            @default(0) // Tracks total units
+  unitsPerPack  Int            @default(1) // Total Tablets per Box (stripsPerBox * tabletsPerStrip)
+  stripsPerBox  Int            @default(1) // New: How many strips in a box
+  tabletsPerStrip Int          @default(1) // New: How many tablets in a strip
+  batches       Batch[]
+  saleItems     SaleItem[]
+  purchaseItems PurchaseItem[]
+  transfers     Transfer[]
+  aliases       ProductAlias[]
+  productSuppliers ProductSupplier[]
+  expectedDiscounts ExpectedDiscount[]
+  ocrItems      OCRItem[]
+  pricingSnapshots ProductPricingSnapshot[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Branch {
+  id        Int      @id @default(autoincrement())
+  name      String
+  location  String
+  type      String   // "Main" | "Pharmacy"
+  batches   Batch[]
+  sales     Sale[]
+  purchases Purchase[]
+  users     User[]
+  employees Employee[]
+  attendances Attendance[]
+  fromTransfers Transfer[] @relation("FromBranch")
+  toTransfers   Transfer[] @relation("ToBranch")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Batch {
+  id            Int            @id @default(autoincrement())
+  batchNo       String
+  manufacturingDate DateTime?
+  expiryDate    DateTime
+  quantity      Int            // Tracks total units in this batch
+  productId     Int
+  product       Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branchId      Int?
+  branch        Branch?        @relation(fields: [branchId], references: [id])
+  supplierId    Int?
+  supplier      Supplier?      @relation(fields: [supplierId], references: [id])
+  purchasePrice Float?
+  saleItems     SaleItem[]
+  purchaseItems PurchaseItem[]
+  createdAt     DateTime       @default(now())
+}
+
+model Sale {
+  id           Int        @id @default(autoincrement())
+  invoiceNo    String     @unique
+  date         DateTime   @default(now())
+  total        Float
+  tax          Float
+  discount     Float      @default(0)
+  paidAmount   Float      @default(0)
+  changeAmount Float      @default(0)
+  items        SaleItem[]
+  branchId     Int?
+  branch       Branch?    @relation(fields: [branchId], references: [id])
+  createdById  Int?
+  createdBy    User?      @relation("UserSales", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime   @default(now())
+}
+
+model SaleItem {
+  id        Int     @id @default(autoincrement())
+  saleId    Int
+  sale      Sale    @relation(fields: [saleId], references: [id])
+  productId Int
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batchId   Int
+  batch     Batch   @relation(fields: [batchId], references: [id])
+  pricingSnapshotId Int?
+  pricingSnapshot ProductPricingSnapshot? @relation(fields: [pricingSnapshotId], references: [id], onDelete: SetNull)
+  quantity  Int     // units sold
+  price     Float   // price per unit sold (strip price or piece price)
+  rateAtSaleTime Float @default(0)
+  discountPercentAtSaleTime Float @default(0)
+  discountAmountAtSaleTime Float @default(0)
+  netAmount Float @default(0)
+  isPiece   Boolean @default(false)
+}
+
+model ProductPricingSnapshot {
+  id               Int        @id @default(autoincrement())
+  productId        Int
+  product          Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  salePrice        Float
+  discountPercent  Float      @default(0)
+  isDiscountActive Boolean    @default(false)
+  saleItems        SaleItem[]
+  createdAt        DateTime   @default(now())
+}
+
+model Purchase {
+  id         Int            @id @default(autoincrement())
+  invoiceNo  String         @unique
+  date       DateTime       @default(now())
+  total      Float
+  supplierId Int
+  supplier   Supplier       @relation(fields: [supplierId], references: [id])
+  items      PurchaseItem[]
+  branchId   Int?
+  branch     Branch?        @relation(fields: [branchId], references: [id])
+  createdAt  DateTime       @default(now())
+}
+
+model PurchaseItem {
+  id                Int      @id @default(autoincrement())
+  purchaseId        Int
+  purchase          Purchase @relation(fields: [purchaseId], references: [id])
+  productId         Int
+  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batchId           Int
+  batch             Batch    @relation(fields: [batchId], references: [id])
+  quantity          Int
+  bonusQty          Int      @default(0)
+  price             Float
+  discountPercent   Float    @default(0)
+  gstPercent        Float    @default(0)
+  furtherTaxPercent Float    @default(0)
+  nonAtlTaxPercent  Float    @default(0)
+  advTaxPercent     Float    @default(0)
+  netAmount         Float    @default(0)
+  effectiveCost     Float    @default(0)
+  batchNo           String?
+  expiryDate        String?
+  remarks           String?
+}
+
+model Supplier {
+  id          Int        @id @default(autoincrement())
+  name        String
+  phone       String?
+  email       String?
+  address     String?
+  purchases   Purchase[]
+  productSuppliers ProductSupplier[]
+  batches     Batch[]
+  totalOrders Int        @default(0)
+  lastOrder   DateTime?
+  createdAt   DateTime   @default(now())
+}
+
+model Settings {
+  id           Int     @id @default(1)
+  pharmacyName String
+  ownerName    String
+  phone        String
+  email        String
+  address      String
+  logo         String?
+  geminiApiKey String?
+}
+
+model Alert {
+  id        Int      @id @default(autoincrement())
+  type      String // expiry, stock
+  title     String
+  message   String
+  severity  String // critical, warning, info
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Transfer {
+  id              Int      @id @default(autoincrement())
+  productId       Int
+  product         Product  @relation(fields: [productId], references: [id])
+  fromBranchId    Int
+  fromBranch      Branch   @relation("FromBranch", fields: [fromBranchId], references: [id])
+  toBranchId      Int
+  toBranch        Branch   @relation("ToBranch", fields: [toBranchId], references: [id])
+  quantity        Int
+  batchNo         String
+  date            DateTime @default(now())
+  status          String   // "Completed", "Pending"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(POS)
+  isActive  Boolean  @default(true)
+  branchId  Int?
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+  sales     Sale[]   @relation("UserSales")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ================= NEW OCR & MATCHING TABLES =================
+
+model OCRInvoice {
+  id           Int       @id @default(autoincrement())
+  invoiceNo    String
+  supplierName String?
+  invoiceDate  DateTime?
+  totalAmount  Float?
+  rawText      String?   // Raw OCR text for reference
+  status       String    @default("pending") // pending, matched, reviewed
+  items        OCRItem[]
+  createdAt    DateTime  @default(now())
+}
+
+model OCRItem {
+  id               Int        @id @default(autoincrement())
+  ocrInvoiceId     Int
+  ocrInvoice       OCRInvoice @relation(fields: [ocrInvoiceId], references: [id])
+  rawName          String     // Name as read from OCR
+  matchedProductId Int?       // Linked product after matching
+  matchedProduct   Product? @relation(fields: [matchedProductId], references: [id], onDelete: SetNull)
+  quantity         Int?
+  unitPrice        Float?
+  discount         Float?
+  totalPrice       Float?
+  batchNo          String?
+  expiryDate       DateTime?
+  status           String     @default("unmatched") // unmatched, matched, manual
+  createdAt        DateTime   @default(now())
+}
+
+model ProductAlias {
+  id        Int      @id @default(autoincrement())
+  alias     String   @unique // OCR alternate name
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model ExpectedDiscount {
+  id           Int      @id @default(autoincrement())
+  productId    Int
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplierName String?
+  discountPct  Float    // Expected discount percentage
+  bonusQty     String?  // e.g. "10+2" bonus scheme
+  notes        String?
+  createdAt    DateTime @default(now())
+}
+
+model ProductSupplier {
+  id            Int      @id @default(autoincrement())
+  productId     Int
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplierId    Int
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
+  purchasePrice Float
+  discount      Float    @default(0)
+  lastUpdated   DateTime @updatedAt
+
+  @@unique([productId, supplierId])
+}
+
+model AccountTransaction {
+  id           Int       @id @default(autoincrement())
+  type         String    // "Expense", "Revenue", "Salary"
+  category     String    // e.g., "Utility", "Rent", "Maintenance", "Bonus"
+  amount       Float
+  date         DateTime  @default(now())
+  description  String?
+  status       String    @default("Completed") // Completed, Pending
+  employeeId   Int?
+  employee     Employee? @relation(fields: [employeeId], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Employee {
+  id           Int                  @id @default(autoincrement())
+  name         String
+  phone        String?
+  email        String?              @unique
+  cnic         String?              @unique
+  designation  String?
+  roleId       Int?
+  role         Role?                @relation(fields: [roleId], references: [id])
+  branchId     Int?
+  branch       Branch?              @relation(fields: [branchId], references: [id])
+  baseSalary   Float                @default(0)
+  status       String               @default("Active") // Active, Inactive, Terminated
+  joinDate     DateTime             @default(now())
+  transactions AccountTransaction[]
+  attendances  Attendance[]
+  salaries     Salary[]
+  leaves       Leave[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+}
+
+// ================= NEW HR MODULE TABLES =================
+
+model Role {
+  id          Int        @id @default(autoincrement())
+  name        String     @unique // admin, manager, staff
+  permissions String     // JSON string of permissions like '["view_employees", "add_attendance"]'
+  employees   Employee[]
+  createdAt   DateTime   @default(now())
+}
+
+model Attendance {
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  branchId   Int?
+  branch     Branch?  @relation(fields: [branchId], references: [id])
+  date       DateTime @default(now())
+  checkIn    DateTime?
+  checkOut   DateTime?
+  status     String   @default("Present") // Present, Absent, Late
+  createdAt  DateTime @default(now())
+}
+
+model Salary {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  month       String   // e.g., "YYYY-MM"
+  basicSalary Float
+  bonus       Float    @default(0)
+  deduction   Float    @default(0)
+  netSalary   Float
+  status      String   @default("Unpaid") // Paid, Unpaid
+  createdAt   DateTime @default(now())
+
+  @@unique([employeeId, month])
+}
+
+model Leave {
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  fromDate   DateTime
+  toDate     DateTime
+  reason     String?
+  status     String   @default("Pending") // Pending, Approved, Rejected
+  createdAt  DateTime @default(now())
+}
